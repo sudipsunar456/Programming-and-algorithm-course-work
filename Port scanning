@@ -1,0 +1,78 @@
+import socket
+import threading
+from queue import Queue
+import PySimpleGUI as sg
+
+# Create the layout for the main GUI
+layout = [
+    [sg.Text("Target IP Address:"), sg.InputText(key="ip")],
+    [sg.Text("Start Port:"), sg.InputText(key="start_port")],
+    [sg.Text("End Port:"), sg.InputText(key="end_port")],
+    [sg.Text("Target Name:"), sg.InputText(key="name")],
+    [sg.Button("Scan"), sg.Button("View Logs")]
+]
+
+# Create the window
+window = sg.Window("Port Scanner", layout)
+
+# List to store scan history
+scan_history = []
+
+# Function for the scan button
+def scan_res(ip, start_port, end_port, name):
+    if ip == "" or start_port == "" or end_port == "" or name == "":
+        sg.popup_error("Error", "Please fill out all the fields.")
+        return
+    
+    start_port = int(start_port)
+    end_port = int(end_port) + 1
+    
+    open_ports = []
+    
+    def scanner(port):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1)
+        result = s.connect_ex((ip, port))
+        s.close()
+        return result == 0
+    
+    def thread_func():
+        while True:
+            port = queue.get()
+            if scanner(port):
+                open_ports.append(port)
+            queue.task_done()
+
+    queue = Queue()
+    
+    for _ in range(100):
+        thread = threading.Thread(target=thread_func)
+        thread.daemon = True
+        thread.start()
+    
+    for port in range(start_port, end_port):
+        queue.put(port)
+    
+    queue.join()
+    
+    scan_result = f"Target: {name}\nIP: {ip}\nOpen Ports: {open_ports}"
+    sg.popup("Scan Result", scan_result)
+    
+    scan_history.append(scan_result)
+
+# Event loop
+while True:
+    event, values = window.read()
+    if event == sg.WIN_CLOSED:
+        break
+    if event == "Scan":
+        scan_res(values["ip"], values["start_port"], values["end_port"], values["name"])
+    if event == "View Logs":
+        log_layout = [[sg.Text("Scan History:")]]
+        for entry in scan_history:
+            log_layout.append([sg.Text(entry)])
+        sg.Window("Scan History", log_layout).read()
+
+# Close the main window
+window.close()
+
